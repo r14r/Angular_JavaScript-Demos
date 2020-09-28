@@ -1,0 +1,254 @@
+<!doctype html>
+<html>
+<head>
+	<meta charset="utf-8" />
+
+	<title>
+		Input And Output Aliases Can Be Namespaced In Angular 2 Beta 14
+	</title>
+
+	<link rel="stylesheet" type="text/css" href="./demo.css"></link>
+</head>
+<body>
+
+	<h1>
+		Input And Output Aliases Can Be Namespaced In Angular 2 Beta 14
+	</h1>
+
+	<my-app>
+		Loading...
+	</my-app>
+
+	<!-- Load demo scripts. -->
+	<script type="text/javascript" src="../../vendor/angularjs-2-beta/14/es6-shim.min.js"></script>
+	<script type="text/javascript" src="../../vendor/angularjs-2-beta/14/Rx.umd.min.js"></script>
+	<script type="text/javascript" src="../../vendor/angularjs-2-beta/14/angular2-polyfills.min.js"></script>
+	<script type="text/javascript" src="../../vendor/angularjs-2-beta/14/angular2-all.umd.js"></script>
+	<!-- AlmondJS - minimal implementation of RequireJS. -->
+	<script type="text/javascript" src="../../vendor/angularjs-2-beta/14/almond.js"></script>
+	<script type="text/javascript">
+
+		// Defer bootstrapping until all of the components have been declared.
+		requirejs( 
+			[ /* Using require() for better readability. */ ],
+			function run() {
+
+				ng.platform.browser.bootstrap( require( "App" ) );
+
+			}
+		);
+
+
+		// --------------------------------------------------------------------------- //
+		// --------------------------------------------------------------------------- //
+
+
+		// I provide the root application component.
+		define(
+			"App",
+			function registerApp() {
+
+				// Configure the App component definition.
+				ng.core
+					.Component({
+						selector: "my-app",
+						directives: [ require( "Friend" ) ],
+
+						// Notice that when we bind to the input and output properties
+						// on the Friend component, we are NOT USING ANY ALIASING - we
+						// are just using plain property names (as we normally would). 
+						// All of the aliasing for these bindings will be done internally
+						// to the Friend component instance.
+						template:
+						`	
+							<my-friend 
+								[honesty]="hasHonesty"
+								[compassion]="hasCompassion"
+								[kindness]="hasKindness"
+								(laugh)="handleLaugh( $event )"
+								(hug)="handleHug( $event )"
+								(cry)="handleCry( $event )">
+							</my-friend>
+						`
+					})
+					.Class({
+						constructor: AppController
+					})
+				;
+
+				return( AppController );
+
+
+				// I control the App component.
+				function AppController() {
+
+					var vm = this;
+
+					// Setup the input binding values.
+					vm.hasHonesty = true;
+					vm.hasCompassion = false;
+					vm.hasKindness = true;
+
+					// Expose the public methods.
+					vm.handleCry = handleCry;
+					vm.handleHug = handleHug;
+					vm.handleLaugh = handleLaugh;
+
+
+					// ---
+					// PUBLIC METHODS.
+					// ---
+
+
+					// I handle the Friend's "cry" event.
+					function handleCry( event ) {
+
+						console.log( "(cry):", event );
+
+					}
+
+
+					// I handle the Friend's "hug" event.
+					function handleHug( event ) {
+
+						console.log( "(hug):", event );
+
+					}
+
+
+					// I handle the Friend's "laugh" event.
+					function handleLaugh( event ) {
+
+						console.log( "(laugh):", event );
+
+					}
+
+				}
+
+			}
+		);
+
+
+		// --------------------------------------------------------------------------- //
+		// --------------------------------------------------------------------------- //
+
+
+		// I provide a Friend component that aliases inputs and outputs internally.
+		define(
+			"Friend",
+			function registerFriend() {
+
+				// Configure the Friend component definition.
+				ng.core
+					.Component({
+						selector: "my-friend",
+
+						// When we define the input bindings notice that we are aliasing
+						// the attributes in a "VIRTUES" namespace locally. This will 
+						// cause Angular to treat the alias as an "object path" in the 
+						// component instance (ex, this.virtues.honesty).
+						inputs: [ 
+							"virtues.honesty: honesty", 
+							"virtues.compassion: compassion", 
+							"virtues.kindness: kindness" 
+						],
+
+						// When we define the output bindings notice that we are aliasing
+						// the attributes in a "BEHAVIORS" namespace locally. This will 
+						// cause Angular to treat the alias as an "object path" in the 
+						// component instance (ex, this.behaviors.cry).
+						outputs: [
+							"behaviors.cry: cry", 
+							"behaviors.hug: hug", 
+							"behaviors.laugh: laugh" 
+						],
+						template:
+						`
+							I am your friend :)
+						`
+					})
+					.Class({
+						constructor: FriendController,
+
+						// Define the life-cycle event methods on the prototype so that
+						// they'll be picked up at run time.
+						ngOnChanges: function noop() {}
+					})
+				;
+
+				return( FriendController );
+
+
+				// I control the Friend component.
+				function FriendController() {
+
+					var vm = this;
+
+					// Setup the Virtues namespace for input bindings.
+					vm.virtues = {
+						honesty: false,
+						compassion: false,
+						kindness: false
+					};
+
+					// Setup the Behaviors namespace for output bindings.
+					// --
+					// CAUTION: Using (isAsync=false) in order to make the console-logging
+					// a little bit easier to follow with the groups.
+					vm.behaviors = {
+						cry: new ng.core.EventEmitter( false ),
+						hug: new ng.core.EventEmitter( false ),
+						laugh: new ng.core.EventEmitter( false )
+					};
+
+					// After a delay, trigger some events.
+					setTimeout(
+						function triggerEvents() {
+
+							console.group( "Emitted Behaviors" );
+
+							vm.behaviors.cry.next( "Weep" );
+							vm.behaviors.hug.next( "Squeeze" );
+							vm.behaviors.laugh.next( "Ha ha ha, lol." );
+							
+							console.groupEnd();
+
+						},
+						500
+					);
+
+					// Expose the public methods.
+					vm.ngOnChanges = ngOnChanges;
+
+
+					// ---
+					// PUBLIC METHODS.
+					// ---
+
+
+					// I get called whenever the input bindings change.
+					function ngOnChanges( changes ) {
+
+						console.group( "Virtues" );
+
+						console.log( "Honesty:", vm.virtues.honesty );
+						console.log( "Compassion:", vm.virtues.compassion );
+						console.log( "Kindness:", vm.virtues.kindness );
+
+						// Let's log out the changes object to see how binding paths
+						// are recorded.
+						console.dir( changes );
+
+						console.groupEnd();
+
+					}
+
+				}
+
+			}
+		);
+
+	</script>
+
+</body>
+</html>

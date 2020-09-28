@@ -1,0 +1,294 @@
+<!doctype html>
+<html ng-app="Demo">
+<head>
+	<meta charset="utf-8" />
+
+	<title>
+		Creating An Isolate-Scope Directive With Multiple Transclusion Points In AngularJS
+	</title>
+
+	<link rel="stylesheet" type="text/css" href="./demo.css"></link>
+</head>
+<body ng-controller="AppController as vm">
+
+	<h1>
+		Creating An Isolate-Scope Directive With Multiple Transclusion Points In AngularJS
+	</h1>
+
+	<!-- 
+		This Layout component creates an isolate scope, but transcludes the 
+		contents of each one of the embedded "panels" so that the content of 
+		each panel can access the outer scope of the context while the structure
+		of the component can remain encapsulated within the isolate template.
+	-->
+	<layout size="vm.size">
+		<layout-panel role="header">
+
+			Layout Header
+
+		</layout-panel>
+		<layout-panel role="body">
+
+			<!-- 
+				These values will all be bound to the outer scope, NOT to the
+				ISOLATE scope. 
+			-->
+
+			<p>
+				Layout Body - Size: {{ vm.size }}
+			</p>
+
+			<p>
+				<a ng-click="vm.toggleSize()">Toggle Size</a>
+			</p>
+
+			<p>
+				Sanity Check: {{ vm.message }}
+			</p>
+
+		</layout-panel>
+		<layout-panel role="footer">
+
+			Layout Footer
+
+		</layout-panel>
+	</layout>
+
+
+	<!-- Load scripts. -->
+	<script type="text/javascript" src="../../vendor/jquery/jquery-2.1.0.min.js"></script>
+	<script type="text/javascript" src="../../vendor/angularjs/angular-1.4.5.min.js"></script>
+	<script type="text/javascript">
+
+		// Create an application module for our demo.
+		var app = angular.module( "Demo", [] );
+
+
+		// --------------------------------------------------------------------------- //
+		// --------------------------------------------------------------------------- //
+
+
+		// I control the root of the application.
+		angular.module( "Demo" ).controller(
+			"AppController",
+			function AppController( $scope ) {
+
+				var vm = this;
+
+				// I hold the desired size of the layout. This is passed into the 
+				// layout component as a isolate-bound attribute.
+				vm.size = "small";
+
+				// I hold a sanity-check value to make sure the isolate layout scope
+				// and the main scope are not colliding.
+				vm.message = "Hello world!";
+				
+				// Expose public methods.
+				vm.toggleSize = toggleSize;
+
+
+				// ---
+				// PUBLIC METHODS.
+				// ---
+
+
+				// I toggle the currently-desired size of the layout component.
+				function toggleSize() {
+
+					vm.size = ( vm.size === "small" )
+						? "large"
+						: "small"
+					;
+
+				}
+
+			}
+		);
+
+
+		// --------------------------------------------------------------------------- //
+		// --------------------------------------------------------------------------- //
+
+
+		// I provide a layout with thee panels - header, footer, and body.
+		// --
+		// NOTE: This component directive is broken up into two different priorities.
+		// We need to do this because we need to access the element content before the
+		// "template" is applied, which is not currently possible in a single directive
+		// (that I know of). As such, we have two passes:
+		// --
+		// The first pass defines the controller and inspects the element and gathers 
+		// up the linking functions for the sub-content areas.
+		// --
+		// The second pass pulls in the template, replaces the element content 
+		// (automatically) and performs the sub-content transclusion using the linking 
+		// functions compiled in the first pass.
+		angular.module( "Demo" ).directive(
+			"layout",
+			function layoutDirective( $compile ) {
+
+				// Return the directive configuration.
+				// --
+				// NOTE: We are creating an isolate-scope along with a Controller.
+				return({
+					controller: LayoutController,
+					controllerAs: "vm",
+					compile: compile,
+					priority: -1,
+					restrict: "E",
+					scope: {
+						layoutSize: "=size"
+					},
+					terminal: true
+				});
+
+
+				// I compile the contents of the individual panels and make the 
+				// resultant linking functions available on the controller.
+				function compile( tElement ) {
+
+					// I hole the linking functions, indexed by role.
+					var linkFunctions = {};
+
+					// Find each <layout-panel> and compile the content.
+					tElement
+						.children( "layout-panel" )
+						.each(
+							function iterator( i, node ) {
+
+								var panel = angular.element( node );
+								var role = panel.attr( "role" );
+
+								if ( role ) {
+
+									linkFunctions[ role ] = $compile( panel.contents() );
+
+								}
+
+							}
+						)
+					;
+
+					return( link );
+
+
+					// I continue the linking process of the terminal workflow.
+					function link( scope, element, attribute, controller ) {
+
+						// When the first pass on the Layout links, we have a chance to
+						// expose the sub-content linking functions on the controller.
+						controller.linkFunctions = linkFunctions;
+
+						// Since this pass was "terminal", we now have to explicitly
+						// compile and link the second-pass. Note that we are linking it
+						// to the ISOLATE SCOPE so that the template in the second-pass
+						// will be linked to the proper scope, not the parent scope.
+						$compile( element, null, -1 )( scope /* Isolate scope. */ );
+
+					}
+
+				}
+
+
+				// I control the Layout component directive.
+				function LayoutController( $scope ) {
+
+					var vm = this;
+
+					// Create a ReactJS-inspired props object for bound attributes.
+					var props = $scope.props = $scope;
+
+					// As a sanity check, let's define a value that we know will also
+					// be defined on the parent scope. This way, we can see if any
+					// scope collision takes place.
+					vm.message = "From isolate scope.";
+
+				}
+
+			}
+		);
+
+		// I manage the second pass on the layout component directive, providing the 
+		// component template and transcluding the sub-content areas.
+		angular.module( "Demo" ).directive(
+			"layout",
+			function layoutDirective() {
+
+				// Return the directive configuration.
+				return({
+					link: link,
+					require: "layout",
+					restrict: "E",
+					priority: -2, // Ensure lower priority than first-pass.
+					template:
+					`
+						<div class="layout-inner" ng-class="{ large: ( props.layoutSize == 'large' ) }">
+							<div class="layout-header">
+								<!-- Transcuded. -->
+							</div>
+							<div class="layout-body">
+								<!-- Transcuded. -->
+							</div>
+							<div class="layout-footer">
+								<!-- Transcuded. -->
+							</div>
+						</div>
+					`
+				});
+
+
+				// I transclude the sub-content areas using the controller-
+				// provided linking functions and bind JavaScript events to the
+				// local view-model.
+				function link( scope, element, attributes, controller ) {
+
+					// Since the first pass on the layout component explicitly linked
+					// this lower-priority directive on the ISOLATE scope, we need to 
+					// go up to the parent scope to access the content scope.
+					var transcludeScope = scope.$parent;
+
+					// Locate the transclusion containers.
+					var inner = element.children( "div.layout-inner" );
+					var headerPanel = inner.children( "div.layout-header" );
+					var bodyPanel = inner.children( "div.layout-body" );
+					var footerPanel = inner.children( "div.layout-footer" );
+
+					// Link and inject the header.
+					controller.linkFunctions.header(
+						transcludeScope,
+						function attachClone( clone ) {
+
+							headerPanel.append( clone );
+
+						}
+					);
+
+					// Link and inject the body.
+					controller.linkFunctions.body(
+						transcludeScope,
+						function attachClone( clone ) {
+
+							bodyPanel.append( clone );
+
+						}
+					);
+
+					// Link and inject the footer.
+					controller.linkFunctions.footer(
+						transcludeScope,
+						function attachClone( clone ) {
+
+							footerPanel.append( clone );
+
+						}
+					);
+
+				}
+
+			}
+		);
+
+	</script>
+
+</body>
+</html>
